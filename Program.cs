@@ -8,6 +8,7 @@ namespace WeatherFetchService
     {
         static void Main(string[] args)
         {
+            // Set Console Properties
             Console.Title = "WeatherFetch Service";
             Console.SetWindowSize(64, 38);
             Console.SetBufferSize(64, 76);

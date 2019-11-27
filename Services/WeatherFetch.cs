@@ -148,6 +148,7 @@ namespace WeatherFetchService.Services
                                 temps.Select(d => $"{d.Key};{d.Value};")
                                 );
 
+                // TODO: Fix this
                 csv.Insert(0, "Datum;Temperatur[C];" + Environment.NewLine);
 
                 // Export CSV as File

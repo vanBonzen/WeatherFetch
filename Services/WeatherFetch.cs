@@ -19,7 +19,6 @@ namespace WeatherFetchService.Services
         private HttpClient _httpClient { get; set; }
         private ILogger _logger;
 
-
         public WeatherFetch()
         {
             _httpClient = new HttpClient();
@@ -53,7 +52,6 @@ namespace WeatherFetchService.Services
                 File.Delete(@".\output\WeatherData.csv");
                 _logger.LogInformation("Found old WeatherData.csv - deleting...");
             }
-
             #endregion
 
             // Get .KMZ Archive from DWD
@@ -85,7 +83,8 @@ namespace WeatherFetchService.Services
                 XNamespace kml = "http://www.opengis.net/kml/2.2";
                 XNamespace dwd = "https://opendata.dwd.de/weather/lib/pointforecast_dwd_extension_V1_0.xsd";
 
-                var loadedKml = fileToLoad[0].OpenRead();
+                // Load into var to close stream after processing
+                FileStream loadedKml = fileToLoad[0].OpenRead();
 
                 // Get all TimeSteps
                 _logger.LogInformation("Getting TimeSteps...");
@@ -128,7 +127,7 @@ namespace WeatherFetchService.Services
                                    })
                                    .ToList();
 
-
+                loadedKml.Close();
 
                 // Combine TimeSteps with Temperatures
                 _logger.LogInformation("Combine TimeSteps with Temperatures...");
@@ -146,18 +145,17 @@ namespace WeatherFetchService.Services
                                 .Join(
                                 Environment.NewLine,
                                 temps.Select(d => $"{d.Key};{d.Value};")
-                                );
+                                ).Insert(0, "Datum;Temperatur [C]" + Environment.NewLine);
 
-                // TODO: Fix this
-                csv.Insert(0, "Datum;Temperatur[C];" + Environment.NewLine);
+                // Get written DateTime of .KML File
+                string lastWrittenDate = File.GetLastWriteTime(fileToLoad[0].ToString()).ToString("dd-MM-yyyy_HH-mm");
 
                 // Export CSV as File
-                _logger.LogInformation("Writing CSV to /output/WeatherData.csv...");
-                System.IO.File.WriteAllText(@".\output\WeatherData.csv", csv);
+                _logger.LogInformation("Writing CSV to /output/WeatherData-" + lastWrittenDate + ".csv...");
+                System.IO.File.WriteAllText(@".\output\WeatherData-" + lastWrittenDate + ".csv", csv);
 
                 // Cleaning tmp Files
                 _logger.LogInformation("Cleaning temporary Files...");
-                loadedKml.Close();
                 Directory.Delete(@".\tmp\", true);
 
                 // Success Message

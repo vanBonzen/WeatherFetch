@@ -5,6 +5,6 @@ namespace WeatherFetchService.Services
     public interface IWeatherFetch
     {
         Task GetWeather();
-        Task Intro();
+        Task<char> Intro();
     }
 }

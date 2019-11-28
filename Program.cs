@@ -15,9 +15,6 @@ namespace WeatherFetchService
             // Weather Fetch Service
             IWeatherFetch weatherFetch = new WeatherFetch();
 
-            // Intro
-            weatherFetch.Intro();
-
             // Getting Weather
             await weatherFetch.GetWeather();
 

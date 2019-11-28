@@ -150,17 +150,15 @@ namespace WeatherFetchService.Services
                 // Get written DateTime of .KML File
                 string lastWrittenDate = File.GetLastWriteTime(fileToLoad[0].ToString()).ToString("dd-MM-yyyy_HH-mm");
 
-                // Export CSV as File
-                _logger.LogInformation("Writing CSV to /output/WeatherData-" + lastWrittenDate + ".csv...");
-                System.IO.File.WriteAllText(@".\output\WeatherData-" + lastWrittenDate + ".csv", csv);
+                WriteCsvFile(lastWrittenDate, csv);
 
                 // Cleaning tmp Files
-                _logger.LogInformation("Cleaning temporary Files...");
+                _logger.LogInformation("Deleting '.\\tmp\\' Directory...");
                 Directory.Delete(@".\tmp\", true);
 
                 // Success Message
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("\n          Sucessfull - Press any key to exit...\n");
+                Console.WriteLine(Environment.NewLine + "          Sucessfull - Press any key to exit..." + Environment.NewLine);
                 Console.ForegroundColor = ConsoleColor.White;
             }
         }
@@ -175,11 +173,11 @@ namespace WeatherFetchService.Services
             Console.WriteLine("  \\/  \\/ \\___|\\__,_|\\__|_| |_|\\___|_| \\/   \\___|\\__\\___|_| |_|");
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("\n          Press any key to fetch Weather Data...");
+            Console.WriteLine(Environment.NewLine + "          Press any key to fetch Weather Data...");
             Console.ForegroundColor = ConsoleColor.White;
 
             Console.ReadKey();
-            Console.Write(System.Environment.NewLine);
+            Console.Write(Environment.NewLine);
         }
 
         private static ILogger GenerateLogger()
@@ -196,6 +194,41 @@ namespace WeatherFetchService.Services
 
             ILogger logger = loggerFactory.CreateLogger("Weather Fetch Service");
             return logger;
+        }
+
+        // Check if File is locked
+        private bool IsFileLocked(string filename)
+        {
+            bool Locked = false;
+            try
+            {
+                FileStream fs =
+                    File.Open(filename, FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite, FileShare.None);
+                fs.Close();
+            }
+            catch (IOException ex)
+            {
+                Locked = true;
+            }
+            return Locked;
+        }
+
+        // Export CSV as File
+        private async Task WriteCsvFile(string lastWrittenDate, string csv)
+        {
+            if (!IsFileLocked(@".\output\WeatherData-" + lastWrittenDate + ".csv"))
+            {
+                _logger.LogInformation("Writing CSV to /output/WeatherData-" + lastWrittenDate + ".csv...");
+                System.IO.File.WriteAllText(@".\output\WeatherData-" + lastWrittenDate + ".csv", csv);
+            }
+            else
+            {
+                _logger.LogWarning("File: /output/WeatherData-" + lastWrittenDate + ".csv is in use." + Environment.NewLine + "Close and press any key to try again");
+                Console.ReadKey();
+                Console.Write(Environment.NewLine);
+                WriteCsvFile(lastWrittenDate, csv);
+            }
         }
     }
 }

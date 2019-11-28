@@ -115,6 +115,18 @@ namespace WeatherFetchService.Services
                                         })
                                         .ToList();
 
+                    // Get Percipitation Probability
+                    _logger.LogInformation("Getting Percipitation Probability...");
+                    var percipitation = doc.Root
+                                        .Element(kml + "Document")
+                                        .Element(kml + "Placemark")
+                                        .Element(kml + "ExtendedData")
+                                        .Elements(dwd + "Forecast")
+                                        .Where(x => x.Attribute(dwd + "elementName").Value.Equals("wwP"))
+                                        .FirstOrDefault().Value.Split(" ")
+                                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                                        .ToList();
+
                     loadedKml.Close();
 
                     // Generating Weather Objects out of Lists
@@ -123,16 +135,18 @@ namespace WeatherFetchService.Services
                     {
                         DateTime date = Convert.ToDateTime(timeSteps[i].Value);
                         double temperature = temperatures[i];
-                        weatherList.Add(new Weather(date, temperature));
+                        int percipitationProb = Convert.ToInt32(percipitation[i].Replace(".", string.Empty)) / 100;
+
+                        weatherList.Add(new Weather(date, temperature, percipitationProb));
                     }
 
-                    // Convert Dictionary to CSV
-                    _logger.LogInformation("Converting Dictionary to CSV...");
+                    // Converting Weather-Objects to CSV String
+                    _logger.LogInformation("Converting Weather-Objects to CSV String...");
                     String csv = String
                                     .Join(
                                     Environment.NewLine,
-                                    weatherList.Select(d => $"{d.Time.ToString()};{d.Temperature.ToString()};")
-                                    ).Insert(0, "Datum;Temperatur [C]" + Environment.NewLine);
+                                    weatherList.Select(d => $"{d.Time.ToString()};{d.Temperature.ToString()};{d.PrecipitationProbability.ToString()};")
+                                    ).Insert(0, "Datum;Temperatur [C];Niederschlagswahrscheinlichkeit [%]" + Environment.NewLine);
 
                     // Get written DateTime of .KML File
                     string lastWrittenDate = lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm");

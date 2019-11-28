@@ -10,11 +10,14 @@ namespace WeatherFetchService.Model
 
         public double Temperature { get; set; }
 
+        public int PrecipitationProbability { get; set; }
 
-        public Weather(DateTime time, double temp)
+
+        public Weather(DateTime time, double temp, int percipitation)
         {
             Time = time;
             Temperature = temp;
+            PrecipitationProbability = (int) percipitation;
         }
     }
 

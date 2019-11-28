@@ -54,112 +54,133 @@ namespace WeatherFetchService.Services
             }
             #endregion
 
-            // Get .KMZ Archive from DWD
-            _logger.LogInformation("Getting .KMZ Archive from DWD...");
-            var response = _httpClient.GetAsync(@"https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/10637/kml/MOSMIX_L_LATEST_10637.kmz");
+            var headers = await _httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, "https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/10637/kml/MOSMIX_L_LATEST_10637.kmz"));
+            DateTime lastModifiedOnServer = DateTime.Parse(headers.Content.Headers.LastModified.ToString());
 
-            // Check for Success
-            if (response.Result.StatusCode == System.Net.HttpStatusCode.OK)
-            {
-                using (var stream = await response.Result.Content.ReadAsStreamAsync())
-                {
-                    // Write to File
-                    var fileInfo = new FileInfo(@".\tmp\MOSMIX_L_LATEST_10637.kmz");
-                    using (var fileStream = fileInfo.OpenWrite())
-                    {
-                        await stream.CopyToAsync(fileStream);
-                    }
-                }
-
-                // Extract .KMZ, so that we get the .KML
-                _logger.LogInformation("Extracting .KMZ...");
-                ZipFile.ExtractToDirectory(@".\tmp\MOSMIX_L_LATEST_10637.kmz", @".\tmp");
-
-                // Find current .KML
-                FileInfo[] fileToLoad = new DirectoryInfo(@".\tmp\").GetFiles("*" + "_10637" + ".kml");
-
-                // Import Namespaces for .KML processing
-                _logger.LogInformation("Importing Namespaces...");
-                XNamespace kml = "http://www.opengis.net/kml/2.2";
-                XNamespace dwd = "https://opendata.dwd.de/weather/lib/pointforecast_dwd_extension_V1_0.xsd";
-
-                // Load into var to close stream after processing
-                FileStream loadedKml = fileToLoad[0].OpenRead();
-
-                // Get all TimeSteps
-                _logger.LogInformation("Getting TimeSteps...");
-                var doc = XDocument.Load(loadedKml);
-                var timeSteps = doc.Root
-                                .Element(kml + "Document")
-                                .Element(kml + "ExtendedData")
-                                .Element(dwd + "ProductDefinition")
-                                .Element(dwd + "ForecastTimeSteps")
-                                .Elements(dwd + "TimeStep");
-
-                List<DateTime> dateTimes = new List<DateTime>();
-
-                // Convert TimeSteps to DateTime
-                foreach (var timeStep in timeSteps)
-                {
-                    DateTime date = Convert.ToDateTime(timeStep.Value);
-
-                    // Add converted TimeStep to dateTimes List
-                    dateTimes.Add(date);
-                }
-
-                // Get all Temperatures
-                _logger.LogInformation("Getting Temperatures...");
-                var temperatures = doc.Root
-                                   .Element(kml + "Document")
-                                   .Element(kml + "Placemark")
-                                   .Element(kml + "ExtendedData")
-                                   .Elements(dwd + "Forecast")
-                                   .Where(x => x.Attribute(dwd + "elementName").Value.Equals("TTT"))
-                                   .FirstOrDefault().Value.Split(" ")
-                                   .Where(s => !string.IsNullOrWhiteSpace(s))
-                                   .Select(y =>
-                                   {
-                                       double r;
-                                       if (double.TryParse(y, out r))
-                                           return Math.Round(((r - 27315) / 100), 2);
-                                       else
-                                           return -1;
-                                   })
-                                   .ToList();
-
-                loadedKml.Close();
-
-                // Combine TimeSteps with Temperatures
-                _logger.LogInformation("Combine TimeSteps with Temperatures...");
-                Dictionary<DateTime, double> temps = new Dictionary<DateTime, double>();
-
-                // For 72h combine
-                for (var i = 0; i < 72; i++)
-                {
-                    temps.Add(dateTimes[i], temperatures[i]);
-                }
-
-                // Convert Dictionary to CSV
-                _logger.LogInformation("Converting Dictionary to CSV...");
-                String csv = String
-                                .Join(
-                                Environment.NewLine,
-                                temps.Select(d => $"{d.Key};{d.Value};")
-                                ).Insert(0, "Datum;Temperatur [C]" + Environment.NewLine);
-
-                // Get written DateTime of .KML File
-                string lastWrittenDate = File.GetLastWriteTime(fileToLoad[0].ToString()).ToString("dd-MM-yyyy_HH-mm");
-
-                WriteCsvFile(lastWrittenDate, csv);
-
-                // Cleaning tmp Files
-                _logger.LogInformation("Deleting '.\\tmp\\' Directory...");
-                Directory.Delete(@".\tmp\", true);
-
+            if (File.Exists(@".\output\WeatherData-" + lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm") + ".csv"))
+            {                    
                 // Success Message
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine(Environment.NewLine + "          Sucessfull - Press any key to exit..." + Environment.NewLine);
+                Console.WriteLine(Environment.NewLine + "File already up to date, nothing to do - Press any key to exit..." + Environment.NewLine);
                 Console.ForegroundColor = ConsoleColor.White;
+            } else
+            {
+                // Get .KMZ Archive from DWD
+                _logger.LogInformation("Getting .KMZ Archive from DWD...");
+                var response = _httpClient.GetAsync(@"https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/10637/kml/MOSMIX_L_LATEST_10637.kmz");
+
+                // Check for Success
+                if (response.Result.StatusCode == System.Net.HttpStatusCode.OK)
+                {
+                    using (var stream = await response.Result.Content.ReadAsStreamAsync())
+                    {
+                        // Write to File
+                        var fileInfo = new FileInfo(@".\tmp\MOSMIX_L_LATEST_10637.kmz");
+                        using (var fileStream = fileInfo.OpenWrite())
+                        {
+                            await stream.CopyToAsync(fileStream);
+                        }
+                    }
+
+                    // Extract .KMZ, so that we get the .KML
+                    _logger.LogInformation("Extracting .KMZ...");
+                    ZipFile.ExtractToDirectory(@".\tmp\MOSMIX_L_LATEST_10637.kmz", @".\tmp");
+
+                    // Find current .KML
+                    FileInfo[] fileToLoad = new DirectoryInfo(@".\tmp\").GetFiles("*" + "_10637" + ".kml");
+
+                    // Import Namespaces for .KML processing
+                    _logger.LogInformation("Importing Namespaces...");
+                    XNamespace kml = "http://www.opengis.net/kml/2.2";
+                    XNamespace dwd = "https://opendata.dwd.de/weather/lib/pointforecast_dwd_extension_V1_0.xsd";
+
+                    // Load into var to close stream after processing
+                    FileStream loadedKml = fileToLoad[0].OpenRead();
+
+                    // Get all TimeSteps
+                    _logger.LogInformation("Getting TimeSteps...");
+                    var doc = XDocument.Load(loadedKml);
+                    var timeSteps = doc.Root
+                                    .Element(kml + "Document")
+                                    .Element(kml + "ExtendedData")
+                                    .Element(dwd + "ProductDefinition")
+                                    .Element(dwd + "ForecastTimeSteps")
+                                    .Elements(dwd + "TimeStep");
+
+                    List<DateTime> dateTimes = new List<DateTime>();
+
+                    // Convert TimeSteps to DateTime
+                    foreach (var timeStep in timeSteps)
+                    {
+                        DateTime date = Convert.ToDateTime(timeStep.Value);
+
+                        // Add converted TimeStep to dateTimes List
+                        dateTimes.Add(date);
+                    }
+
+                    // Get all Temperatures
+                    _logger.LogInformation("Getting Temperatures...");
+                    var temperatures = doc.Root
+                                        .Element(kml + "Document")
+                                        .Element(kml + "Placemark")
+                                        .Element(kml + "ExtendedData")
+                                        .Elements(dwd + "Forecast")
+                                        .Where(x => x.Attribute(dwd + "elementName").Value.Equals("TTT"))
+                                        .FirstOrDefault().Value.Split(" ")
+                                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                                        .Select(y =>
+                                        {
+                                            double r;
+                                            if (double.TryParse(y, out r))
+                                                return Math.Round(((r - 27315) / 100), 2);
+                                            else
+                                                return -1;
+                                        })
+                                        .ToList();
+
+                    loadedKml.Close();
+
+                    // Combine TimeSteps with Temperatures
+                    _logger.LogInformation("Combine TimeSteps with Temperatures...");
+                    Dictionary<DateTime, double> temps = new Dictionary<DateTime, double>();
+
+                    // For 72h combine
+                    for (var i = 0; i < 72; i++)
+                    {
+                        temps.Add(dateTimes[i], temperatures[i]);
+                    }
+
+                    // Convert Dictionary to CSV
+                    _logger.LogInformation("Converting Dictionary to CSV...");
+                    String csv = String
+                                    .Join(
+                                    Environment.NewLine,
+                                    temps.Select(d => $"{d.Key};{d.Value};")
+                                    ).Insert(0, "Datum;Temperatur [C]" + Environment.NewLine);
+
+                    // Get written DateTime of .KML File
+                    string lastWrittenDate = lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm");
+
+                    if (!File.Exists(@".\output\WeatherData-" + lastWrittenDate + ".csv"))
+                    {
+                        // Try to write CSV File
+                        WriteCsvFile(lastWrittenDate, csv);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Weather Data already up to Date!");
+                    }
+
+                    // Cleaning tmp Files
+                    _logger.LogInformation("Deleting '.\\tmp\\' Directory...");
+                    Directory.Delete(@".\tmp\", true);
+
+                    // Success Message
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine(Environment.NewLine + "          Sucessfull - Press any key to exit..." + Environment.NewLine);
+                    Console.ForegroundColor = ConsoleColor.White;
+
+                }
             }
         }
 

@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 
 using Microsoft.Extensions.Logging;
-
+using WeatherFetchService.Model;
 
 namespace WeatherFetchService.Services
 {
@@ -29,42 +29,30 @@ namespace WeatherFetchService.Services
 
             _logger = GenerateLogger();
 
-            // Creating Directorys if not existent
-            _logger.LogInformation("Creating Directorys if not existent...");
-            System.IO.Directory.CreateDirectory(@".\tmp\");
-            System.IO.Directory.CreateDirectory(@".\output\");
-
-            #region Delete old fetched Files
-            _logger.LogInformation("Deleting old Files if exist...");
-            // Search for Files
-            FileInfo[] filesInDir = new DirectoryInfo(@".\tmp\").GetFiles("*" + "_10637" + "*");
-
-            // Delete all found Files
-            foreach (FileInfo foundFile in filesInDir)
+            // Creating output Directory if not existent
+            if (!Directory.Exists(@".\output\"))
             {
-                _logger.LogInformation("Found old temporary Data - deleting...");
-                foundFile.Delete();
+                _logger.LogInformation("Creating output Directory...");
+                System.IO.Directory.CreateDirectory(@".\output\");
             }
 
-            if (File.Exists(@".\output\WeatherData.csv"))
-            {
-                // If file found, delete it    
-                File.Delete(@".\output\WeatherData.csv");
-                _logger.LogInformation("Found old WeatherData.csv - deleting...");
-            }
-            #endregion
-
+            // Check if we have current Weather Data
             var headers = await _httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, "https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/10637/kml/MOSMIX_L_LATEST_10637.kmz"));
             DateTime lastModifiedOnServer = DateTime.Parse(headers.Content.Headers.LastModified.ToString());
 
             if (File.Exists(@".\output\WeatherData-" + lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm") + ".csv"))
-            {                    
+            {
+                if (Directory.Exists(@".\tmp\")) Directory.Delete(@".\tmp\", true);
+
                 // Success Message
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine(Environment.NewLine + "File already up to date, nothing to do - Press any key to exit..." + Environment.NewLine);
                 Console.ForegroundColor = ConsoleColor.White;
-            } else
+            } else // Fetch new Data
             {
+                // Create tmp Directory
+                System.IO.Directory.CreateDirectory(@".\tmp\");
+
                 // Get .KMZ Archive from DWD
                 _logger.LogInformation("Getting .KMZ Archive from DWD...");
                 var response = _httpClient.GetAsync(@"https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/10637/kml/MOSMIX_L_LATEST_10637.kmz");
@@ -105,18 +93,7 @@ namespace WeatherFetchService.Services
                                     .Element(kml + "ExtendedData")
                                     .Element(dwd + "ProductDefinition")
                                     .Element(dwd + "ForecastTimeSteps")
-                                    .Elements(dwd + "TimeStep");
-
-                    List<DateTime> dateTimes = new List<DateTime>();
-
-                    // Convert TimeSteps to DateTime
-                    foreach (var timeStep in timeSteps)
-                    {
-                        DateTime date = Convert.ToDateTime(timeStep.Value);
-
-                        // Add converted TimeStep to dateTimes List
-                        dateTimes.Add(date);
-                    }
+                                    .Elements(dwd + "TimeStep").ToList();
 
                     // Get all Temperatures
                     _logger.LogInformation("Getting Temperatures...");
@@ -140,14 +117,13 @@ namespace WeatherFetchService.Services
 
                     loadedKml.Close();
 
-                    // Combine TimeSteps with Temperatures
-                    _logger.LogInformation("Combine TimeSteps with Temperatures...");
-                    Dictionary<DateTime, double> temps = new Dictionary<DateTime, double>();
-
-                    // For 72h combine
-                    for (var i = 0; i < 72; i++)
+                    // Generating Weather Objects out of Lists
+                    List<Weather> weatherList = new List<Weather>();
+                    for (int i = 0; i < timeSteps.Count(); i++)
                     {
-                        temps.Add(dateTimes[i], temperatures[i]);
+                        DateTime date = Convert.ToDateTime(timeSteps[i].Value);
+                        double temperature = temperatures[i];
+                        weatherList.Add(new Weather(date, temperature));
                     }
 
                     // Convert Dictionary to CSV
@@ -155,7 +131,7 @@ namespace WeatherFetchService.Services
                     String csv = String
                                     .Join(
                                     Environment.NewLine,
-                                    temps.Select(d => $"{d.Key};{d.Value};")
+                                    weatherList.Select(d => $"{d.Time.ToString()};{d.Temperature.ToString()};")
                                     ).Insert(0, "Datum;Temperatur [C]" + Environment.NewLine);
 
                     // Get written DateTime of .KML File

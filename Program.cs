@@ -19,7 +19,7 @@ namespace WeatherFetchService
             Console.Title = "WeatherFetch Service";
 
             CancellationToken token = new CancellationToken();
-            int intervall = 5;
+            int intervall = 30;
             await weatherFetch.Intro();
             await StartTimer(token, intervall);
         }
@@ -32,8 +32,8 @@ namespace WeatherFetchService
                 {
                     await weatherFetch.GetWeather();
                     await Task.Delay(200);
-                    Console.WriteLine("Waiting " + intervall + " minutes to fetch next Data..." + Environment.NewLine);
-                    await Task.Delay(60000 * intervall, cancellationToken);
+                    Console.WriteLine("Waiting " + intervall.ToString() + " seconds to fetch next Data..." + Environment.NewLine);
+                    await Task.Delay(1000 * intervall, cancellationToken);
                     if (cancellationToken.IsCancellationRequested)
                         break;
                 }

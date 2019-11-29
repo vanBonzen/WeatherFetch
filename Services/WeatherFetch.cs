@@ -31,16 +31,17 @@ namespace WeatherFetchService.Services
             _logger = GenerateLogger();
 
             // Add Stations to fetch
-            List<KeyValuePair<string, string>> wheatherLocations = new List<KeyValuePair<string, string>>();
-            wheatherLocations.Add(new KeyValuePair<string, string>("N2254", "Rüsselsheim"));
-            wheatherLocations.Add(new KeyValuePair<string, string>("P0361", "Hochheim"));
-            wheatherLocations.Add(new KeyValuePair<string, string>("10637", "Frankfurt"));
+            List<KeyValuePair<string, string>> weatherLocations = new List<KeyValuePair<string, string>>();
+            weatherLocations.Add(new KeyValuePair<string, string>("N2254", "Rüsselsheim"));
+            weatherLocations.Add(new KeyValuePair<string, string>("P0361", "Hochheim"));
+            weatherLocations.Add(new KeyValuePair<string, string>("10637", "Frankfurt"));
+            weatherLocations.Add(new KeyValuePair<string, string>("L829", "Raunheim"));
 
             // String for later comparison if WeatherData is outdated
             string timeWritten = "aloha";
 
             // Iterate over all Stations
-            foreach (KeyValuePair<string,string> station in wheatherLocations)
+            foreach (KeyValuePair<string,string> station in weatherLocations)
             {
                 // Check if we have current Weather Data
                 _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Fetching Weather for " + station.Value);

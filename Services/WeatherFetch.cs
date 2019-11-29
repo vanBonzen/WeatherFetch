@@ -27,23 +27,29 @@ namespace WeatherFetchService.Services
 
         public async Task GetWeather()
         {
+            // Generate logger
             _logger = GenerateLogger();
 
+            // Add Stations to fetch
             List<KeyValuePair<string, string>> wheatherLocations = new List<KeyValuePair<string, string>>();
             wheatherLocations.Add(new KeyValuePair<string, string>("N2254", "Rüsselsheim"));
             wheatherLocations.Add(new KeyValuePair<string, string>("P0361", "Hochheim"));
             wheatherLocations.Add(new KeyValuePair<string, string>("10637", "Frankfurt"));
 
+            // String for later comparison if WeatherData is outdated
             string timeWritten = "aloha";
 
+            // Iterate over all Stations
             foreach (KeyValuePair<string,string> station in wheatherLocations)
             {
-                _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Fetching Weather for " + station.Value);
-
                 // Check if we have current Weather Data
+                _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Fetching Weather for " + station.Value);
                 var uri = "https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/" + station.Key + "/kml/MOSMIX_L_LATEST_" + station.Key + ".kmz";
                 var headers = await _httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, uri));
+
+                // Get last modified Date
                 DateTime lastModifiedOnServer = DateTime.Parse(headers.Content.Headers.LastModified.ToString());
+                // Convert to String
                 timeWritten = lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm");
 
                 if (File.Exists(@".\tmp\MOSMIX_L_LATEST_" + station.Key + "_" + lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm") + ".kmz"))
@@ -55,7 +61,6 @@ namespace WeatherFetchService.Services
 
                 } else
                 {
-
                     // Create tmp Directory
                     System.IO.Directory.CreateDirectory(@".\tmp\");
 
@@ -157,6 +162,7 @@ namespace WeatherFetchService.Services
                                             .Where(s => !string.IsNullOrWhiteSpace(s))
                                             .ToList();
 
+                        // Close Filestream
                         loadedKml.Close();
 
                         // Generating Weather Objects out of Lists
@@ -181,16 +187,18 @@ namespace WeatherFetchService.Services
                                 Weather weatherFromDb = db.Weather.Where(o => o.Time == weather.Time && o.Location == weather.Location).SingleOrDefault();
                                 if (weatherFromDb != null)
                                 {
-                                    // Check for differencys
+                                    // Check for differencys, if any set new Values
+                                    if (weatherFromDb.WindDirection != weather.WindDirection) weatherFromDb.WindDirection = weather.WindDirection;
                                     if (weatherFromDb.Temperature != weather.Temperature) weatherFromDb.Temperature = weather.Temperature;
                                     if (weatherFromDb.WindSpeed != weather.WindSpeed) weatherFromDb.WindSpeed = weather.WindSpeed;
-                                    if (weatherFromDb.WindDirection != weather.WindDirection) weatherFromDb.WindDirection = weather.WindDirection;
                                 }
                                 else
                                 {
+                                    // New Wheather to add
                                     db.Weather.Add(weather);
                                 }
                             }
+                            // Save changes to Database
                             db.SaveChanges();
                         }
                         // Success Message
@@ -248,41 +256,6 @@ namespace WeatherFetchService.Services
             ILogger logger = loggerFactory.CreateLogger("Weather Fetch Service");
             return logger;
         }
-
-        //// Check if File is locked
-        //private bool IsFileLocked(string filename)
-        //{
-        //    bool Locked = false;
-        //    try
-        //    {
-        //        FileStream fs =
-        //            File.Open(filename, FileMode.OpenOrCreate,
-        //            FileAccess.ReadWrite, FileShare.None);
-        //        fs.Close();
-        //    }
-        //    catch (IOException ex)
-        //    {
-        //        Locked = true;
-        //    }
-        //    return Locked;
-        //}
-
-        //// Export CSV as File
-        //private async Task WriteCsvFile(string lastWrittenDate, string csv, string clearName)
-        //{
-        //    if (!IsFileLocked(@".\output\WeatherData-" + clearName + "-" + lastWrittenDate + ".csv"))
-        //    {
-        //        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Writing CSV to .\\output\\WeatherData -" + clearName + "-" + lastWrittenDate + ".csv");
-        //        System.IO.File.WriteAllText(@".\output\WeatherData-" + clearName + "-" + lastWrittenDate + ".csv", csv);
-        //    }
-        //    else
-        //    {
-        //        _logger.LogWarning(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "File: .\\output\\WeatherData-" + clearName + "-" + lastWrittenDate + ".csv is in use." + Environment.NewLine + "Close and press any key to try again");
-        //        Console.ReadKey();
-        //        Console.Write(Environment.NewLine);
-        //        WriteCsvFile(lastWrittenDate, csv, clearName);
-        //    }
-        //}
     }
 }
 

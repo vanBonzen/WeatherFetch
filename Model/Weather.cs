@@ -1,8 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using Microsoft.EntityFrameworkCore.Metadata.Internal;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Text;
 
 namespace WeatherFetchService.Model
 {
@@ -15,8 +14,7 @@ namespace WeatherFetchService.Model
         public DateTime Time { get; set; }
         public double Temperature { get; set; }
         public int PrecipitationProbability { get; set; }
-        // TODO: Add those 2:
-        public int WindSpeed { get; set; }
+        public double WindSpeed { get; set; }
         public int WindDirection { get; set; }
 
         public Weather()
@@ -24,12 +22,14 @@ namespace WeatherFetchService.Model
 
         }
 
-        public Weather(DateTime time, double temp, int percipitation, string location)
+        public Weather(DateTime time, double temp, int percipitation, string location, double speed, int direction)
         {
             Time = time;
             Temperature = temp;
             PrecipitationProbability = (int) percipitation;
             Location = location;
+            WindSpeed = speed;
+            WindDirection = direction;
         }
     }
 

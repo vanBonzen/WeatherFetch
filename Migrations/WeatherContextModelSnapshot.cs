@@ -38,8 +38,8 @@ namespace WeatherFetchService.Migrations
                     b.Property<int>("WindDirection")
                         .HasColumnType("int");
 
-                    b.Property<int>("WindSpeed")
-                        .HasColumnType("int");
+                    b.Property<double>("WindSpeed")
+                        .HasColumnType("double");
 
                     b.HasKey("Id");
 

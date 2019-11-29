@@ -56,12 +56,9 @@ namespace WeatherFetchService.Services
                     clearName = "Frankfurt";
                 }
 
-                // Creating output Directory if not existent
-                if (!Directory.Exists(@".\output\"))
-                {
-                    _logger.LogInformation("Creating output Directory...");
-                    System.IO.Directory.CreateDirectory(@".\output\");
-                }
+                if (Directory.Exists(@".\tmp\")) Directory.Delete(@".\tmp\", true);
+
+                _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Fetching Weather for " + clearName);
 
                 // Check if we have current Weather Data
                 var uri = "https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/" + station + "/kml/MOSMIX_L_LATEST_" + station + ".kmz";
@@ -70,7 +67,7 @@ namespace WeatherFetchService.Services
 
                 if (File.Exists(@".\output\WeatherData-" + clearName + "-" + lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm") + ".csv"))
                 {
-                    if (Directory.Exists(@".\tmp\")) Directory.Delete(@".\tmp\", true);
+                    
 
                     // Success Message
                     Console.ForegroundColor = ConsoleColor.Green;
@@ -83,7 +80,7 @@ namespace WeatherFetchService.Services
                     System.IO.Directory.CreateDirectory(@".\tmp\");
 
                     // Get .KMZ Archive from DWD
-                    _logger.LogInformation("Getting .KMZ Archive from DWD...");
+                    _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting .KMZ Archive from DWD...");
                     var response = _httpClient.GetAsync(@"https://opendata.dwd.de/weather/local_forecasts/mos/MOSMIX_L/single_stations/" + station + "/kml/MOSMIX_L_LATEST_" + station + ".kmz");
 
                     // Check for Success
@@ -100,14 +97,14 @@ namespace WeatherFetchService.Services
                         }
 
                         // Extract .KMZ, so that we get the .KML
-                        _logger.LogInformation("Extracting .KMZ...");
+                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Extracting .KMZ...");
                         ZipFile.ExtractToDirectory(@".\tmp\MOSMIX_L_LATEST_" + station + ".kmz", @".\tmp");
 
                         // Find current .KML
                         FileInfo[] fileToLoad = new DirectoryInfo(@".\tmp\").GetFiles("*" + "_" + station + ".kml");
 
                         // Import Namespaces for .KML processing
-                        _logger.LogInformation("Importing Namespaces...");
+                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Importing Namespaces...");
                         XNamespace kml = "http://www.opengis.net/kml/2.2";
                         XNamespace dwd = "https://opendata.dwd.de/weather/lib/pointforecast_dwd_extension_V1_0.xsd";
 
@@ -115,7 +112,7 @@ namespace WeatherFetchService.Services
                         FileStream loadedKml = fileToLoad[0].OpenRead();
 
                         // Get all TimeSteps
-                        _logger.LogInformation("Getting TimeSteps...");
+                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting TimeSteps...");
                         var doc = XDocument.Load(loadedKml);
                         var timeSteps = doc.Root
                                         .Element(kml + "Document")
@@ -125,7 +122,7 @@ namespace WeatherFetchService.Services
                                         .Elements(dwd + "TimeStep").ToList();
 
                         // Get all Temperatures
-                        _logger.LogInformation("Getting Temperatures...");
+                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting Temperatures...");
                         var temperatures = doc.Root
                                             .Element(kml + "Document")
                                             .Element(kml + "Placemark")
@@ -145,13 +142,37 @@ namespace WeatherFetchService.Services
                                             .ToList();
 
                         // Get Percipitation Probability
-                        _logger.LogInformation("Getting Percipitation Probability...");
+                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting Percipitation Probability...");
                         var percipitation = doc.Root
                                             .Element(kml + "Document")
                                             .Element(kml + "Placemark")
                                             .Element(kml + "ExtendedData")
                                             .Elements(dwd + "Forecast")
                                             .Where(x => x.Attribute(dwd + "elementName").Value.Equals("wwP"))
+                                            .FirstOrDefault().Value.Split(" ")
+                                            .Where(s => !string.IsNullOrWhiteSpace(s))
+                                            .ToList();
+
+                        // Get Windspeed
+                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting Windspeed...");
+                        var speed = doc.Root
+                                            .Element(kml + "Document")
+                                            .Element(kml + "Placemark")
+                                            .Element(kml + "ExtendedData")
+                                            .Elements(dwd + "Forecast")
+                                            .Where(x => x.Attribute(dwd + "elementName").Value.Equals("FF"))
+                                            .FirstOrDefault().Value.Split(" ")
+                                            .Where(s => !string.IsNullOrWhiteSpace(s))
+                                            .ToList();
+
+                        // Get Winddirection
+                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting Winddirection...");
+                        var wind = doc.Root
+                                            .Element(kml + "Document")
+                                            .Element(kml + "Placemark")
+                                            .Element(kml + "ExtendedData")
+                                            .Elements(dwd + "Forecast")
+                                            .Where(x => x.Attribute(dwd + "elementName").Value.Equals("DD"))
                                             .FirstOrDefault().Value.Split(" ")
                                             .Where(s => !string.IsNullOrWhiteSpace(s))
                                             .ToList();
@@ -165,19 +186,24 @@ namespace WeatherFetchService.Services
                             DateTime date = Convert.ToDateTime(timeSteps[i].Value);
                             double temperature = temperatures[i];
                             int percipitationProb = Convert.ToInt32(percipitation[i].Replace(".", string.Empty)) / 100;
+                            double windSpeed = Convert.ToDouble(speed[i])/100;
+                            int windDirection = Convert.ToInt32(wind[i].Replace(".", string.Empty)) / 100;
 
-                            weatherList.Add(new Weather(date, temperature, percipitationProb, clearName));
+                            weatherList.Add(new Weather(date, temperature, percipitationProb, clearName, windSpeed, windDirection));
                         }
 
                         // Writing to DB
+                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Updating Database...");
                         using (var db = new WeatherContext())
                         {
                             foreach (Weather weather in weatherList)
                             {
-                                Weather weatherFromDb = db.Weather.Where(o => o.Time == weather.Time && o.Location == weather.Location).FirstOrDefault();
+                                Weather weatherFromDb = db.Weather.Where(o => o.Time == weather.Time && o.Location == weather.Location).SingleOrDefault();
                                 if (weatherFromDb != null)
                                 {
                                     if (weatherFromDb.Temperature != weather.Temperature) weatherFromDb.Temperature = weather.Temperature;
+                                    if (weatherFromDb.WindSpeed != weather.WindSpeed) weatherFromDb.WindSpeed = weather.WindSpeed;
+                                    if (weatherFromDb.WindDirection != weather.WindDirection) weatherFromDb.WindDirection = weather.WindDirection;
                                 }
                                 else
                                 {
@@ -188,21 +214,18 @@ namespace WeatherFetchService.Services
                         }
 
                         // Cleaning tmp Files
-                        _logger.LogInformation("Deleting '.\\tmp\\' Directory...");
+                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Deleting '.\\tmp\\' Directory...");
                         Directory.Delete(@".\tmp\", true);
 
                         // Success Message
-                        Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine(Environment.NewLine + "          Sucessfull - Press any key to exit..." + Environment.NewLine);
-                        Console.ForegroundColor = ConsoleColor.White;
-
+                        _logger.LogInformation(Environment.NewLine + clearName + " updated sucessfull" + Environment.NewLine);
 
                     }
                 }
             }
         }
 
-        public async Task<char> Intro()
+        public async Task Intro()
         {
             // Console Art
             Console.WriteLine(" __    __           _   _                ___    _       _     ");
@@ -213,11 +236,9 @@ namespace WeatherFetchService.Services
 
 
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.Write(Environment.NewLine + "Choose: Hochheim(1), Rüsselsheim(2) or Frankfurt a.M.(3) (1/2/3): ");
-            char choice = Console.ReadKey().KeyChar;
+            Console.Write(Environment.NewLine + "                Copyright by vanBonzen");
             Console.ForegroundColor = ConsoleColor.White;
             Console.WriteLine(Environment.NewLine);
-            return choice;
         }
 
         private static ILogger GenerateLogger()
@@ -259,12 +280,12 @@ namespace WeatherFetchService.Services
         {
             if (!IsFileLocked(@".\output\WeatherData-" + clearName + "-" + lastWrittenDate + ".csv"))
             {
-                _logger.LogInformation("Writing CSV to .\\output\\WeatherData -" + clearName + "-" + lastWrittenDate + ".csv");
+                _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Writing CSV to .\\output\\WeatherData -" + clearName + "-" + lastWrittenDate + ".csv");
                 System.IO.File.WriteAllText(@".\output\WeatherData-" + clearName + "-" + lastWrittenDate + ".csv", csv);
             }
             else
             {
-                _logger.LogWarning("File: .\\output\\WeatherData-" + clearName + "-" + lastWrittenDate + ".csv is in use." + Environment.NewLine + "Close and press any key to try again");
+                _logger.LogWarning(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "File: .\\output\\WeatherData-" + clearName + "-" + lastWrittenDate + ".csv is in use." + Environment.NewLine + "Close and press any key to try again");
                 Console.ReadKey();
                 Console.Write(Environment.NewLine);
                 WriteCsvFile(lastWrittenDate, csv, clearName);

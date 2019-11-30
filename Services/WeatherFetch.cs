@@ -20,6 +20,9 @@ namespace WeatherFetchService.Services
         private HttpClient _httpClient { get; set; }
         private ILogger _logger;
 
+        private readonly XNamespace kml = "http://www.opengis.net/kml/2.2";
+        private readonly XNamespace dwd = "https://opendata.dwd.de/weather/lib/pointforecast_dwd_extension_V1_0.xsd";
+
         public WeatherFetch()
         {
             _httpClient = new HttpClient();
@@ -89,11 +92,6 @@ namespace WeatherFetchService.Services
                         // Find current .KML
                         FileInfo[] fileToLoad = new DirectoryInfo(@".\tmp\").GetFiles("*" + "_" + station.Key + ".kml");
 
-                        // Import Namespaces for .KML processing
-                        _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Importing Namespaces...");
-                        XNamespace kml = "http://www.opengis.net/kml/2.2";
-                        XNamespace dwd = "https://opendata.dwd.de/weather/lib/pointforecast_dwd_extension_V1_0.xsd";
-
                         // Load into var to close stream after processing
                         FileStream loadedKml = fileToLoad[0].OpenRead();
 
@@ -101,67 +99,27 @@ namespace WeatherFetchService.Services
                         _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting TimeSteps...");
                         var doc = XDocument.Load(loadedKml);
                         var timeSteps = doc.Root
-                                        .Element(kml + "Document")
-                                        .Element(kml + "ExtendedData")
-                                        .Element(dwd + "ProductDefinition")
-                                        .Element(dwd + "ForecastTimeSteps")
-                                        .Elements(dwd + "TimeStep").ToList();
+                                            .Element(kml + "Document")
+                                            .Element(kml + "ExtendedData")
+                                            .Element(dwd + "ProductDefinition")
+                                            .Element(dwd + "ForecastTimeSteps")
+                                            .Elements(dwd + "TimeStep").ToList();
 
                         // Get all Temperatures
                         _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting Temperatures...");
-                        var temperatures = doc.Root
-                                            .Element(kml + "Document")
-                                            .Element(kml + "Placemark")
-                                            .Element(kml + "ExtendedData")
-                                            .Elements(dwd + "Forecast")
-                                            .Where(x => x.Attribute(dwd + "elementName").Value.Equals("TTT"))
-                                            .FirstOrDefault().Value.Split(" ")
-                                            .Where(s => !string.IsNullOrWhiteSpace(s))
-                                            .Select(y =>
-                                            {
-                                                double r;
-                                                if (double.TryParse(y, out r))
-                                                    return Math.Round(((r - 27315) / 100), 2);
-                                                else
-                                                    return -1;
-                                            })
-                                            .ToList();
+                        var temperatures = await GetWeatherFeature(doc, "TTT");
 
                         // Get Percipitation Probability
                         _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting Percipitation Probability...");
-                        var percipitation = doc.Root
-                                            .Element(kml + "Document")
-                                            .Element(kml + "Placemark")
-                                            .Element(kml + "ExtendedData")
-                                            .Elements(dwd + "Forecast")
-                                            .Where(x => x.Attribute(dwd + "elementName").Value.Equals("wwP"))
-                                            .FirstOrDefault().Value.Split(" ")
-                                            .Where(s => !string.IsNullOrWhiteSpace(s))
-                                            .ToList();
+                        var percipitation = await GetWeatherFeature(doc, "wwP");
 
                         // Get Windspeed
                         _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting Windspeed...");
-                        var speed = doc.Root
-                                            .Element(kml + "Document")
-                                            .Element(kml + "Placemark")
-                                            .Element(kml + "ExtendedData")
-                                            .Elements(dwd + "Forecast")
-                                            .Where(x => x.Attribute(dwd + "elementName").Value.Equals("FF"))
-                                            .FirstOrDefault().Value.Split(" ")
-                                            .Where(s => !string.IsNullOrWhiteSpace(s))
-                                            .ToList();
+                        var speed = await GetWeatherFeature(doc, "FF");
 
                         // Get Winddirection
                         _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting Winddirection...");
-                        var wind = doc.Root
-                                            .Element(kml + "Document")
-                                            .Element(kml + "Placemark")
-                                            .Element(kml + "ExtendedData")
-                                            .Elements(dwd + "Forecast")
-                                            .Where(x => x.Attribute(dwd + "elementName").Value.Equals("DD"))
-                                            .FirstOrDefault().Value.Split(" ")
-                                            .Where(s => !string.IsNullOrWhiteSpace(s))
-                                            .ToList();
+                        var wind = await GetWeatherFeature(doc, "DD");
 
                         // Close Filestream
                         loadedKml.Close();
@@ -171,7 +129,7 @@ namespace WeatherFetchService.Services
                         for (int i = 0; i < timeSteps.Count(); i++)
                         {
                             DateTime date = Convert.ToDateTime(timeSteps[i].Value);
-                            double temperature = temperatures[i];
+                            double temperature = (Convert.ToDouble(temperatures[i]) - 27315) / 100;
                             int percipitationProb = Convert.ToInt32(percipitation[i].Replace(".", string.Empty)) / 100;
                             double windSpeed = Convert.ToDouble(speed[i]) / 100;
                             int windDirection = Convert.ToInt32(wind[i].Replace(".", string.Empty)) / 100;
@@ -224,6 +182,19 @@ namespace WeatherFetchService.Services
             {
                 File.Delete(kmlFile);
             }
+        }
+
+        private async Task<List<string>> GetWeatherFeature(XDocument input, string feature)
+        {
+            return input.Root
+                        .Element(kml + "Document")
+                        .Element(kml + "Placemark")
+                        .Element(kml + "ExtendedData")
+                        .Elements(dwd + "Forecast")
+                        .Where(x => x.Attribute(dwd + "elementName").Value.Equals(feature))
+                        .FirstOrDefault().Value.Split(" ")
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .ToList();
         }
 
         public async Task Intro()

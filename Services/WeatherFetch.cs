@@ -1,17 +1,14 @@
-﻿using System;
-
+﻿using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-
 using System.Linq;
 using System.Net.Http;
-using System.Xml.Linq;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-
-using Microsoft.Extensions.Logging;
-using WeatherFetchService.Model;
+using System.Xml.Linq;
 using WeatherFetchService.Data;
+using WeatherFetchService.Model;
 
 namespace WeatherFetchService.Services
 {
@@ -52,11 +49,9 @@ namespace WeatherFetchService.Services
                 var headers = await _httpClient.SendAsync(new HttpRequestMessage(HttpMethod.Head, uri));
 
                 // Get last modified Date
-                DateTime lastModifiedOnServer = DateTime.Parse(headers.Content.Headers.LastModified.ToString());
-                // Convert to String
-                timeWritten = lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm");
+                timeWritten = DateTime.Parse(headers.Content.Headers.LastModified.ToString()).ToString("dd-MM-yyyy_HH-mm");
 
-                if (File.Exists(@".\tmp\MOSMIX_L_LATEST_" + station.Key + "_" + lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm") + ".kmz"))
+                if (File.Exists(@".\tmp\MOSMIX_L_LATEST_" + station.Key + "_" + timeWritten + ".kmz"))
                 {
                     // Success Message
                     Console.ForegroundColor = ConsoleColor.Green;
@@ -78,7 +73,7 @@ namespace WeatherFetchService.Services
                         using (var stream = await response.Result.Content.ReadAsStreamAsync())
                         {
                             // Write to File
-                            var fileInfo = new FileInfo(@".\tmp\MOSMIX_L_LATEST_" + station.Key + "_" + lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm") + ".kmz");
+                            var fileInfo = new FileInfo(@".\tmp\MOSMIX_L_LATEST_" + station.Key + "_" + timeWritten + ".kmz");
                             using (var fileStream = fileInfo.OpenWrite())
                             {
                                 await stream.CopyToAsync(fileStream);
@@ -87,7 +82,7 @@ namespace WeatherFetchService.Services
 
                         // Extract .KMZ, so that we get the .KML
                         _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Extracting .KMZ...");
-                        ZipFile.ExtractToDirectory(@".\tmp\MOSMIX_L_LATEST_" + station.Key + "_" + lastModifiedOnServer.ToString("dd-MM-yyyy_HH-mm") + ".kmz", @".\tmp", true);
+                        ZipFile.ExtractToDirectory(@".\tmp\MOSMIX_L_LATEST_" + station.Key + "_" + timeWritten + ".kmz", @".\tmp", true);
 
                         // Find current .KML
                         FileInfo[] fileToLoad = new DirectoryInfo(@".\tmp\").GetFiles("*" + "_" + station.Key + ".kml");
@@ -98,7 +93,7 @@ namespace WeatherFetchService.Services
                         // Get all TimeSteps
                         _logger.LogInformation(DateTime.Now.ToString("dd-MM-yyyy HH:mm: ") + "Getting TimeSteps...");
                         var doc = XDocument.Load(loadedKml);
-                        var timeSteps = doc.Root
+                        var time = doc.Root
                                             .Element(kml + "Document")
                                             .Element(kml + "ExtendedData")
                                             .Element(dwd + "ProductDefinition")
@@ -126,13 +121,13 @@ namespace WeatherFetchService.Services
 
                         // Generating Weather Objects out of Lists
                         List<Weather> weatherList = new List<Weather>();
-                        for (int i = 0; i < timeSteps.Count(); i++)
+                        for (int i = 0; i < time.Count(); i++)
                         {
-                            DateTime date = Convert.ToDateTime(timeSteps[i].Value);
-                            double temperature = (Convert.ToDouble(temperatures[i]) - 27315) / 100;
-                            int percipitationProb = Convert.ToInt32(percipitation[i].Replace(".", string.Empty)) / 100;
+                            DateTime date = Convert.ToDateTime(time[i].Value);
                             double windSpeed = Convert.ToDouble(speed[i]) / 100;
+                            double temperature = (Convert.ToDouble(temperatures[i]) - 27315) / 100;
                             int windDirection = Convert.ToInt32(wind[i].Replace(".", string.Empty)) / 100;
+                            int percipitationProb = Convert.ToInt32(percipitation[i].Replace(".", string.Empty)) / 100;
 
                             weatherList.Add(new Weather(date, temperature, percipitationProb, station.Value, windSpeed, windDirection));
                         }
